@@ -8,11 +8,43 @@ from runners.com_psnr import quality
 from utils.data_utils import inverse_data_transform
 
 def compute_alpha(beta, t):
+    """
+    Compute the product alpha bar over time steps t
+
+    Args:
+        beta (torch.Tensor): The beta schedule for diffusion
+        t (torch.Tensor): Time steps for which to compute alpha
+
+    Returns:
+        torch.Tensor: Computed alpha values for the given time steps
+    """
     beta = torch.cat([torch.zeros(1).to(beta.device), beta], dim=0)
     a = (1 - beta).cumprod(dim=0).index_select(0, t + 1).view(-1, 1, 1, 1)
     return a
 
 def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_0, etaB, etaA, etaC, mask=None, img_clean = None, logger=None, args=None, config=None, image_folder=None):
+    """
+    Perform steps for the diffusion model
+
+    Args:
+        pinv_y_0 (np.ndarray): Pseudo-inverse of the degraded image y_0
+        x (torch.Tensor): Initial noise tensor
+        seq (list): Sequence of timesteps for diffusion process
+        model (VS2M): The model used for optimization
+        b (torch.Tensor): Beta values for diffusion process
+        H_funcs: Functions for degradation and its pseudo-inverse
+        y_0 (torch.Tensor): The degraded image
+        sigma_0 (float): Noise standard deviation
+        etaB (float): Scaling factor for noise reduction
+        etaA (float): Scaling factor for noise addition
+        etaC (float): Scaling factor for combined noise
+        mask (torch.Tensor, optional): Mask for inpainting
+        img_clean (torch.Tensor, optional): Clean image
+        logger (logging.Logger, optional): Logger to record the process
+        args (Namespace, optional): Arguments for the process
+        config (Namespace, optional): Configuration parameters
+        image_folder (str, optional): Path to save sampled images
+    """
     ## prepare some vectors used in the algorithm
     singulars = H_funcs.singulars() 
     Sigma = torch.zeros(x.shape[1]*x.shape[2]*x.shape[3], device=x.device)
@@ -52,6 +84,8 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
             next_t = (torch.ones(n) * j).to(x.device)
             at = compute_alpha(b, t.long())
             at_next = compute_alpha(b, next_t.long())
+
+            # update x_t for this iteration
             if iii == 1:
                 xt = x.to(x.device)
                 avg = np.array(0)
@@ -61,6 +95,7 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
 
         ## The untrained network parameters are not updated until iii>args.start_point, roughly equivalent to starting the backdiffusion process from the args.start_point step
         update = False if iii < args.start_point else True
+        # predict denoised image
         if update: 
             x0_t, step, best_, psnr_best_= model.optimize(xt.squeeze().permute(1, 2, 0).detach().cpu().numpy(),
                             img_clean.squeeze().permute(1, 2, 0).detach().cpu().numpy(), at, mask, config.model.iter_number[iii-1], logger, avg, update) 

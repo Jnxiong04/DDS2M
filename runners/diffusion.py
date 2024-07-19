@@ -19,6 +19,18 @@ torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = True
 
 def get_beta_schedule(beta_schedule, *, beta_start, beta_end, num_diffusion_timesteps):
+    """
+    Get beta schedule for diffusion
+
+    Args:
+        beta_schedule (str): The type of beta schedule (quad, linear, const, jsd, sigmoid)
+        beta_start (float): The starting value of beta
+        beta_end (float): The ending value of beta
+        num_diffusion_timesteps (int): The number of diffusion timesteps
+
+    Returns:
+        np.ndarray: An array of betas for each timestep
+    """
     def sigmoid(x):
         return 1 / (np.exp(-x) + 1)
 
@@ -53,6 +65,14 @@ def get_beta_schedule(beta_schedule, *, beta_start, beta_end, num_diffusion_time
 
 class Diffusion(object):
     def __init__(self, args, config, device=None):
+        """
+        Class to run the diffusion process
+
+        Args:
+            args (Namespace): Command line arguments
+            config (Namespace): Configuration parameters
+            device (torch.device): Device to run the model on
+        """
         self.args = args
         self.config = config
         if device is None:
@@ -88,6 +108,14 @@ class Diffusion(object):
             self.logvar = posterior_variance.clamp(min=1e-20).log()
 
     def sample(self, logger, config, image_folder):
+        """
+        Sample image using diffusion
+
+        Args:
+            logger (logging.Logger): Logger for logging information
+            config (Namespace): Configuration parameters
+            image_folder (str): Folder to save the sampled images
+        """
         model = VS2M(
             self.args.rank, np.ones((self.config.data.image_size, self.config.data.image_size, self.config.data.channels)),
             np.ones((self.config.data.image_size, self.config.data.image_size, self.config.data.channels)), 
@@ -97,6 +125,15 @@ class Diffusion(object):
 
 
     def sample_sequence(self, model, config=None, logger=None, image_folder=None):
+        """
+        Generate a sequence of sampled images
+
+        Args:
+            model (VS2M): The model used for sampling
+            config (Namespace): Configuration for sampling
+            logger (logging.Logger): Logger to record the process
+            image_folder (str): Path to save sampled images
+        """
         args, config = self.args, self.config
         deg = args.deg
 
@@ -109,7 +146,8 @@ class Diffusion(object):
         mat['mask_10'] = mat['mask_10']
         mat['mask_20'] = mat['mask_20']
         mat['mask_30'] = mat['mask_30']
-        ## get degradation matrix 
+
+        ## get degradation matrix based on task
         if deg[:10] == 'completion':
             args.sr = int(deg[10:])
             from functions.svd_replacement import Inpainting
@@ -179,9 +217,25 @@ class Diffusion(object):
 
 
     def sample_image(self, pinv_y_0, x, model, H_funcs, y_0, sigma_0, mask=None, img_clean=None, logger=None, image_folder=None):
+        """
+        Sample an image and denoise it
+
+        Args:
+            pinv_y_0 (np.ndarray): Pseudo-inverse of y_0
+            x (torch.Tensor): The initial noise tensor
+            model (VS2M): The model used for sampling
+            H_funcs: The degradation functions
+            y_0 (torch.Tensor): The degraded image
+            sigma_0 (float): Noise standard deviation
+            mask (torch.Tensor, optional): Mask for inpainting
+            img_clean (torch.Tensor, optional): Clean image
+            logger (logging.Logger, optional): Logger to record the process
+            image_folder (str, optional): Path to save sampled images
+        """
         skip = self.num_timesteps // self.args.timesteps
         seq = range(0, self.num_timesteps, skip)
         
+        # runs the diffusion model for denoising
         efficient_generalized_steps(pinv_y_0, x, seq, model, self.betas, H_funcs, y_0, sigma_0, \
             etaB=self.args.etaB, etaA=self.args.eta, etaC=self.args.eta, mask=mask, img_clean = img_clean, logger=logger, args=self.args, config=self.config, image_folder=image_folder)
 
