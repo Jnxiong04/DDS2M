@@ -154,7 +154,7 @@ class Inpainting(H_functions):
 #Denoising
 class Denoising(H_functions):
     def __init__(self, channels, img_dim, device):
-        self._singulars = torch.ones(channels * img_dim**2, device=device)
+        self._singulars = torch.ones(channels * img_dim**3, device=device)
 
     def V(self, vec):
         return vec.clone().reshape(vec.shape[0], -1)

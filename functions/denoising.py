@@ -19,7 +19,7 @@ def compute_alpha(beta, t):
         torch.Tensor: Computed alpha values for the given time steps
     """
     beta = torch.cat([torch.zeros(1).to(beta.device), beta], dim=0)
-    a = (1 - beta).cumprod(dim=0).index_select(0, t + 1).view(-1, 1, 1, 1)
+    a = (1 - beta).cumprod(dim=0).index_select(0, t + 1).view(-1, 1, 1, 1, 1)
     return a
 
 def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_0, etaB, etaA, etaC, mask=None, img_clean = None, logger=None, args=None, config=None, image_folder=None):
@@ -47,24 +47,24 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
     """
     ## prepare some vectors used in the algorithm
     singulars = H_funcs.singulars() 
-    Sigma = torch.zeros(x.shape[1]*x.shape[2]*x.shape[3], device=x.device)
+    Sigma = torch.zeros(x.shape[1]*x.shape[2]*x.shape[3]*x.shape[4], device=x.device)
     Sigma[:singulars.shape[0]] = singulars
     U_t_y = H_funcs.Ut(y_0)
     Sig_inv_U_t_y = U_t_y / singulars[:U_t_y.shape[-1]]
-
+    
     largest_alphas = compute_alpha(b, (torch.ones(x.size(0)) * seq[-1]).to(x.device).long())
     largest_sigmas = (1 - largest_alphas).sqrt() / largest_alphas.sqrt()
-    large_singulars_index = torch.where(singulars * largest_sigmas[0, 0, 0, 0] > sigma_0)
-    inv_singulars_and_zero = torch.zeros(x.shape[1] * x.shape[2] * x.shape[3]).to(singulars.device)
+    large_singulars_index = torch.where(singulars * largest_sigmas[0, 0, 0, 0, 0] > sigma_0)
+    inv_singulars_and_zero = torch.zeros(x.shape[1] * x.shape[2] * x.shape[3] * x.shape[4]).to(singulars.device)
     inv_singulars_and_zero[large_singulars_index] = sigma_0 / singulars[large_singulars_index]
     inv_singulars_and_zero = inv_singulars_and_zero.view(1, -1)
 
     ## initialize some variables in the diffusion process
-    init_y = torch.zeros(x.shape[0], x.shape[1] * x.shape[2] * x.shape[3]).to(x.device)
+    init_y = torch.zeros(x.shape[0], x.shape[1] * x.shape[2] * x.shape[3] * x.shape[4]).to(x.device)
     init_y[:, large_singulars_index[0]] = U_t_y[:, large_singulars_index[0]] / singulars[large_singulars_index].view(1, -1)
     init_y = init_y.view(*x.size())
     remaining_s = largest_sigmas.view(-1, 1) ** 2 - inv_singulars_and_zero ** 2
-    remaining_s = remaining_s.view(x.shape[0], x.shape[1], x.shape[2], x.shape[3]).clamp_min(0.0).sqrt()
+    remaining_s = remaining_s.view(x.shape[0], x.shape[1], x.shape[2], x.shape[3], x.shape[4]).clamp_min(0.0).sqrt()
     init_y = init_y + remaining_s * x
     init_y = init_y / largest_sigmas
 
@@ -74,7 +74,7 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
     seq_next = [-1] + list(seq[:-1])
 
     iii= 0
-    psnr_best = 0
+    psnr_best = None
     best = None
     ## iterate over the timesteps
     for i, j in tqdm(zip(reversed(seq), reversed(seq_next))):
@@ -91,15 +91,15 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
                 avg = np.array(0)
             else:
                 xt = xt_next.to(x.device)
-                avg = x0_t[0, :,:, :].permute(1,2,0).cpu().numpy()
+                avg = x0_t[0, :, :, :, :].permute(1,2,3,0).cpu().numpy()
 
         ## The untrained network parameters are not updated until iii>args.start_point, roughly equivalent to starting the backdiffusion process from the args.start_point step
         update = False if iii < args.start_point else True
         # predict denoised image
         if update: 
-            x0_t, step, best_, psnr_best_= model.optimize(xt.squeeze().permute(1, 2, 0).detach().cpu().numpy(),
-                            img_clean.squeeze().permute(1, 2, 0).detach().cpu().numpy(), at, mask, config.model.iter_number[iii-1], logger, avg, update) 
-            x0_t = torch.from_numpy(x0_t).permute(2, 0, 1).unsqueeze(0).cuda()
+            x0_t, step, best_, psnr_best_= model.optimize(xt.squeeze(0).permute(1, 2, 3, 0).detach().cpu().numpy(),
+                            img_clean.squeeze(0).permute(1, 2, 3, 0).detach().cpu().numpy(), at, mask, config.model.iter_number[iii-1], logger, avg, update) 
+            x0_t = torch.from_numpy(x0_t).permute(3, 0, 1, 2).unsqueeze(0).cuda()
             x0_t = x0_t * 2 - 1.0
             if psnr_best_ > psnr_best:
                 psnr_best = psnr_best_
@@ -112,8 +112,8 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
 
         ## variational inference conditioned on y (Eqn. 13 in the main paper)
         with torch.no_grad():
-            sigma = (1 - at).sqrt()[0, 0, 0, 0] / at.sqrt()[0, 0, 0, 0]
-            sigma_next = (1 - at_next).sqrt()[0, 0, 0, 0] / at_next.sqrt()[0, 0, 0, 0]
+            sigma = (1 - at).sqrt()[0, 0, 0, 0, 0] / at.sqrt()[0, 0, 0, 0, 0]
+            sigma_next = (1 - at_next).sqrt()[0, 0, 0, 0, 0] / at_next.sqrt()[0, 0, 0, 0, 0]
             V_t_x0 = H_funcs.Vt(x0_t)
             SVt_x0 = (V_t_x0 * Sigma)[:, :U_t_y.shape[1]]
 
@@ -143,22 +143,22 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
 
             #aggregate all cases and give next prediction
             xt_mod_next = H_funcs.V(Vt_xt_mod_next)
-            xt_next = (at_next.sqrt()[0, 0, 0, 0] * xt_mod_next).view(*x.shape)
-
+            xt_next = (at_next.sqrt()[0, 0, 0, 0, 0] * xt_mod_next).view(*x.shape)
+            
             x0_t = torch.clamp((x0_t + 1.0) / 2.0, 0.0, 1.0)
-            psnr = quality(x0_t.squeeze().cpu().permute(1,2,0).numpy(), img_clean.squeeze().permute(1,2,0).numpy())
+            psnr = quality(x0_t.squeeze(0).cpu().permute(1,2,3,0).numpy(), img_clean.squeeze(0).permute(1,2,3,0).numpy())
 
             if psnr_best < psnr:
                 psnr_best = psnr
-                best = x0_t.squeeze().cpu().permute(1,2,0).numpy()
+                best = x0_t.squeeze(0).cpu().permute(1,2,3,0).numpy()
             logger.info('iteration: {}, psnr: {}, psnr_best: {}'.format(iii, psnr, psnr_best))
 
     x_ = inverse_data_transform(config, xt_next.to('cpu'))
 
-    x_save = x_[0,:,:,:].permute(1,2,0).cpu().numpy()
+    x_save = x_[0,:,:,:,:].permute(1,2,3,0).cpu().numpy()
     x_best = best
-    img_clean_save = img_clean[0,:,:,:].permute(1,2,0).cpu().numpy()
-    psnr = quality(x_save, img_clean[0,:,:,:].permute(1,2,0).detach().cpu().numpy())
+    img_clean_save = img_clean[0,:,:,:,:].permute(1,2,3,0).cpu().numpy()
+    psnr = quality(x_save, img_clean[0,:,:,:,:].permute(1,2,3,0).detach().cpu().numpy())
 
     scio.savemat(
         os.path.join(image_folder, f"x_{iii}.mat"), {'y_0': pinv_y_0, 'x_recon':x_save, 'img_clean':img_clean_save, 'psnr':psnr, 'x_best':np.clip(x_best,0,1), 'psnr_best':psnr_best}

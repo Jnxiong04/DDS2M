@@ -103,7 +103,7 @@ def main():
     args, config = parse_args_and_config()
 
     # create output file
-    args.logger_name = '{}_{}_rank_{}_eta_{}_beta_{}-{}-{}_'.format(args.deg, config.data.filename.split('.')[0], args.rank, args.eta, config.diffusion.beta_start, config.diffusion.beta_end, config.diffusion.beta_schedule) + 'iteration_{}-{}_{}-{}_beta_{}_lr_{}'.format(args.start_point, args.timesteps, config.model.iter_number[0], config.model.iter_number[-1], args.beta, config.model.lr)
+    args.logger_name = "test"
     args.image_folder = os.path.join('./results', args.logger_name)
     if not os.path.exists(args.image_folder):
         os.makedirs(args.image_folder)

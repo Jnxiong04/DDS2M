@@ -5,7 +5,7 @@ from collections import namedtuple
 from runners.com_psnr import quality
 from models import *
 from models.fcn import fcn
-from models.skip import skip
+from models.skip3D import skip
 from models.losses import *
 from models.noise import *
 from utils.image_io import *
@@ -33,7 +33,7 @@ class VS2M(object):
         self.channel = image_noisy.shape[2]
         self.image_size = image_noisy.shape[0]
         self.now_rank = self.rank
-        self.image = np.reshape(image_noisy, (image_noisy.shape[0] * image_noisy.shape[1], image_noisy.shape[2]), order="F")
+        self.image = np.reshape(image_noisy, (-1, image_noisy.shape[3]), order="F")
         self.image_clean = image_clean
         self.num_iter = num_iter
         self.image_net = None
@@ -58,7 +58,7 @@ class VS2M(object):
         self._init_all()
         self.out_avg = 0
         self.save_every = 1000
-        self.o = torch.zeros((self.image_clean.shape[0] * self.image_clean.shape[1], self.image_clean.shape[2])).type(
+        self.o = torch.zeros((self.image_clean.shape[0] * self.image_clean.shape[1] * self.image_clean.shape[2], self.image_clean.shape[3])).type(
             torch.cuda.FloatTensor)
         self.previous = np.zeros(self.image_clean.shape)
 
@@ -89,9 +89,10 @@ class VS2M(object):
                            need_sigmoid=False, pad=pad, act_fun='LeakyReLU').type(data_type)
             self.parameters = [p for p in net.parameters()] + self.parameters
             self.image_net.append(net)
+
         self.mask_net = []
         for i in range(self.rank):
-            net = fcn(self.image_clean.shape[2], self.image_clean.shape[2], num_hidden=[128, 256, 256, 128]).type(data_type)
+            net = fcn(self.image_clean.shape[3], self.image_clean.shape[3], num_hidden=[128, 256, 256, 128]).type(data_type)
             self.parameters = self.parameters + [p for p in net.parameters()]
             self.mask_net.append(net)
 
@@ -109,9 +110,9 @@ class VS2M(object):
         """
         Initialize inputs to neural net
         """
-        original_noise = torch_to_np(get_noise1(1, 'noise', (self.input_depth, self.image_clean.shape[0], self.image_clean.shape[1]), noise_type='u',
+        original_noise = torch_to_np(get_noise1(1, 'noise', (self.input_depth, *self.image_clean.shape[:3]), noise_type='u',
                                                                      var=10/10.).type(torch.cuda.FloatTensor).detach())
-        self.image_net_inputs = np_to_torch(original_noise).type(torch.cuda.FloatTensor).detach()[0, :, :, :]
+        self.image_net_inputs = np_to_torch(original_noise).type(torch.cuda.FloatTensor).detach()[0, :, :, :, :]
 
 
         original_noise = torch_to_np(get_noise2(1, 'noise', self.image.shape[1], noise_type='u', var=10/ 10.).type(torch.cuda.FloatTensor).detach())
@@ -160,7 +161,7 @@ class VS2M(object):
         """
         self.num_iter = iteration
         # self.mask = torch.from_numpy(mask).cuda()
-        self.image = np.reshape(image_noisy, (image_noisy.shape[0] * image_noisy.shape[1], image_noisy.shape[2]), order="F")
+        self.image = np.reshape(image_noisy, (-1, image_noisy.shape[3]), order="F")
         self.out_avg = avg
         self.image_clean = image_clean
         self._init_images()
@@ -185,7 +186,7 @@ class VS2M(object):
             at (torch.Tensor): Alpha values for diffusion process
             j (int): Current iteration step
         """
-        at = at[0,0,0,0]
+        at = at[0,0,0,0,0]
         m = 0
 
         # pass image input through all networks
@@ -193,12 +194,12 @@ class VS2M(object):
         out = self.image_net[0](M)
         for i in range(1, self.now_rank):
             out = torch.cat((out, self.image_net[i](M)), 0)
-        out = out[:, :, :self.image_clean.shape[0], :self.image_clean.shape[1]]
+        out = out[:, :, :self.image_clean.shape[0], :self.image_clean.shape[1], :self.image_clean.shape[2]]
 
         # reshape and combine outputs for all ranks
-        self.image_out = out[m, :, :, :].squeeze().reshape((-1, 1))
+        self.image_out = out[m, :, :, :, :].squeeze(0).reshape((-1, 1))
         for m in range(1, self.now_rank):
-            self.image_out = torch.cat((self.image_out, out[m, :, :, :].squeeze().reshape((-1, 1))), 1)
+            self.image_out = torch.cat((self.image_out, out[m, :, :, :, :].squeeze(0).reshape((-1, 1))), 1)
         self.image_out_np = torch_to_np(self.image_out)
 
         # run mask networks
@@ -228,7 +229,7 @@ class VS2M(object):
         # compute losses
         self.loss1 = self.mse_loss(self.image_com_rescale * at.sqrt(), self.image_torch)
         self.loss2 = self.kl_loss(self.et)
-        self.image_com_rescale = torch.reshape(self.image_com_rescale, (self.image_size,self.image_size,self.channel)).permute(2,0,1).unsqueeze(0)
+        self.image_com_rescale = torch.reshape(self.image_com_rescale, (self.image_size,self.image_size,self.channel)).permute(3,0,1,2).unsqueeze(0)
         self.loss3 = self.tv_loss(self.image_com_rescale)
         self.total_loss = self.loss1 + self.beta * self.loss3
         self.total_loss.backward(retain_graph=True)

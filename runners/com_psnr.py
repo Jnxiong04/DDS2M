@@ -11,10 +11,10 @@ def quality (imagery1, imagery2):
     imagery1 = imagery1 * 255
     imagery2 = imagery2 * 255
     Nway = imagery1.shape
-    psnr = np.zeros((Nway[2], 1))
+    psnr = np.zeros((Nway[3], 1))
     # ssim = psnr
-    for i in range(Nway[2]):
-        psnr[i] = psnr_index(imagery1[:,:,i],imagery2[:,:,i])
+    for i in range(Nway[3]):
+        psnr[i] = psnr_index(imagery1[:,:,:,i],imagery2[:,:,:,i])
         # ssim[i] = ssim_index(imagery1[:,:,i],imagery2[:,:,i])
     psnr = np.mean(psnr)
     # ssim = np.mean(ssim)

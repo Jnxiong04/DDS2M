@@ -18,9 +18,9 @@ def get_noise1(batch, method, spatial_size, noise_type='u', var=1. / 100):
         var: a factor, a noise will be multiplicated by. Basically it is standard deviation scaler.
     """
     if isinstance(spatial_size, int):
-        spatial_size = (spatial_size, spatial_size)
+        spatial_size = (spatial_size, spatial_size, spatial_size)
     if method == 'noise':
-        shape = [batch, spatial_size[0], spatial_size[1], spatial_size[2]]
+        shape = [batch, spatial_size[0], spatial_size[1], spatial_size[2],  spatial_size[3]]
         net_input = torch.zeros(shape)
 
         fill_noise(net_input, noise_type)
@@ -148,7 +148,7 @@ def get_noise(input_depth, method, spatial_size, noise_type='u', var=1. / 100):
     if isinstance(spatial_size, int):
         spatial_size = (spatial_size, spatial_size)
     if method == 'noise':
-        shape = [1, input_depth, spatial_size[0], spatial_size[1]]
+        shape = [1, input_depth, spatial_size[0], spatial_size[1], spatial_size[2]]
         net_input = torch.zeros(shape)
 
         fill_noise(net_input, noise_type)
@@ -156,7 +156,8 @@ def get_noise(input_depth, method, spatial_size, noise_type='u', var=1. / 100):
     elif method == 'meshgrid':
         assert input_depth % 2 == 0
         X, Y = np.meshgrid(np.arange(0, spatial_size[1]) / float(spatial_size[1] - 1),
-                           np.arange(0, spatial_size[0]) / float(spatial_size[0] - 1))
+                           np.arange(0, spatial_size[0]) / float(spatial_size[0] - 1),
+                           np.arange(0, spatial_size[2]) / float(spatial_size[2] - 1))
         meshgrid = np.concatenate([X[None, :], Y[None, :]] * (input_depth // 2))
         net_input = np_to_torch(meshgrid)
     else:

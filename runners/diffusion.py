@@ -12,9 +12,11 @@ from models.diffusion import Model
 from runners.unet import UNet
 from utils.data_utils import data_transform, inverse_data_transform
 from functions.denoising import efficient_generalized_steps
+from functions.svd_replacement import Denoising
 import torchvision.utils as tvu
 from runners.VS2M import VS2M
 import random
+import pickle
 torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = True
 
@@ -116,15 +118,20 @@ class Diffusion(object):
             config (Namespace): Configuration parameters
             image_folder (str): Folder to save the sampled images
         """
-        model = VS2M(
-            self.args.rank, np.ones((self.config.data.image_size, self.config.data.image_size, self.config.data.channels)),
-            np.ones((self.config.data.image_size, self.config.data.image_size, self.config.data.channels)), 
-            self.args.beta, self.config.model.iter_number, self.config.model.lr
-        )
-        self.sample_sequence(model, config, logger, image_folder=image_folder)
+        path = os.path.join(config.data.root, config.data.filename)
+        with open(path, 'rb') as f:
+            x_test, y_test, observed_mask, missing_mask, ground_truth = pickle.load(f, encoding='latin1')
+        
+        for image in x_test:
+            model = VS2M(
+                self.args.rank, np.ones((self.config.data.image_size, self.config.data.image_size, self.config.data.image_size, self.config.data.channels)),
+                np.ones((self.config.data.image_size, self.config.data.image_size, self.config.data.image_size, self.config.data.channels)), 
+                self.args.beta, self.config.model.iter_number, self.config.model.lr
+            )
+            self.sample_sequence(model, image, config, logger, image_folder=image_folder)
 
 
-    def sample_sequence(self, model, config=None, logger=None, image_folder=None):
+    def sample_sequence(self, model, image, config=None, logger=None, image_folder=None):
         """
         Generate a sequence of sampled images
 
@@ -136,54 +143,13 @@ class Diffusion(object):
         """
         args, config = self.args, self.config
         deg = args.deg
-
-        ## get original msi and mask
-        path = os.path.join(config.data.root, config.data.filename)
-        mat = scipy.io.loadmat(path)
         
         mask = None
-        mat['img_clean'] = mat['img_clean']
-        mat['mask_10'] = mat['mask_10']
-        mat['mask_20'] = mat['mask_20']
-        mat['mask_30'] = mat['mask_30']
 
-        ## get degradation matrix based on task
-        if deg[:10] == 'completion':
-            args.sr = int(deg[10:])
-            from functions.svd_replacement import Inpainting
-            img_clean = torch.from_numpy(np.float32(mat['img_clean'])).permute(2, 0, 1).unsqueeze(0) #（1，32，256，256）
-            mask = torch.from_numpy(np.float32(mat['mask_{}'.format(args.sr)])).permute(2, 0, 1).unsqueeze(0) #(256, 256, 32) --->（1，32，256，256）
-            mask_vec = mask.clone().reshape(mask.shape[0], mask.shape[1], -1).permute(0, 2, 1).reshape(mask.shape[0], -1)[0,:]  #（1，32，256，256） ---> (1, 32, 65536) ---> (1, 65536, 32) ---> (1, 2097152)
-            missing = torch.nonzero(mask_vec == 0).long().reshape(-1) #[1467242]
-            keeping = torch.nonzero((1 - mask_vec) == 0).long().reshape(-1) #[629910]
-            H_funcs = Inpainting(config.data.channels, config.data.image_size, missing, keeping, self.device)
-            mask = np.float32(mat['mask_{}'.format(args.sr)]) #(256, 256, 32)
-        
-        elif deg[:12] == 'sisr_bicubic':
-            factor = int(deg[12:])
-            from functions.svd_replacement import SRConv
-            def bicubic_kernel(x, a=-0.5):
-                if abs(x) <= 1:
-                    return (a + 2)*abs(x)**3 - (a + 3)*abs(x)**2 + 1
-                elif 1 < abs(x) and abs(x) < 2:
-                    return a*abs(x)**3 - 5*a*abs(x)**2 + 8*a*abs(x) - 4*a
-                else:
-                    return 0
-            k = np.zeros((factor * 4))
-            for i in range(factor * 4):
-                x = (1/factor)*(i- np.floor(factor*4/2) +0.5)
-                k[i] = bicubic_kernel(x)
-            k = k / np.sum(k)
-            kernel = torch.from_numpy(k).float().to(self.device)
-            H_funcs = SRConv(kernel / kernel.sum(), \
-                             config.data.channels, self.config.data.image_size, self.device, stride = factor)
-            img_clean = torch.from_numpy(np.float32(mat['img_clean'])).permute(2, 0, 1).unsqueeze(0)
-
-        elif deg[:9] == 'denoising':
-            args.sigma_0 = float(deg[9:])
-            from functions.svd_replacement import Denoising
-            H_funcs = Denoising(config.data.channels, config.data.image_size, self.device)
-            img_clean = torch.from_numpy(np.float32(mat['img_clean'])).permute(2, 0, 1).unsqueeze(0)
+        # get degradation matrix
+        args.sigma_0 = float(deg[9:])
+        H_funcs = Denoising(config.data.channels, config.data.image_size, self.device)
+        img_clean = torch.from_numpy(np.float32(image)).permute(3, 0, 1, 2).unsqueeze(0)
         
         ## to account for scaling to [-1,1]
         args.sigma_0 = 2 * args.sigma_0 
@@ -192,22 +158,23 @@ class Diffusion(object):
         x_orig = img_clean
         x_orig = x_orig.to(self.device)
 
-        x_orig = data_transform(self.config, x_orig)
+        x_orig = data_transform(self.config, x_orig)          # x = 2x + 1
 
         y_0 = H_funcs.H(x_orig) # (1, 629930) only include the konwn pixel for completion
         y_0 = y_0 + sigma_0 * torch.randn_like(y_0)  #add noise on the konwn pixel for completion
 
         ## in this operation, the known pixels remain unchanged, and the unknown pixels are filled with 0, which is essentially a rearrangement process for completion
-        pinv_y_0 = H_funcs.H_pinv(y_0).view(y_0.shape[0], config.data.channels, self.config.data.image_size, self.config.data.image_size) 
+        pinv_y_0 = H_funcs.H_pinv(y_0).view(y_0.shape[0], config.data.channels, self.config.data.image_size, self.config.data.image_size, self.config.data.image_size) 
         ## processing the unknown pixel value for completion
         if deg == 'completion':
             pinv_y_0 += H_funcs.H_pinv(H_funcs.H(torch.ones_like(pinv_y_0))).reshape(*pinv_y_0.shape) - 1
 
-        pinv_y_0 = inverse_data_transform(config, pinv_y_0[0,:,:,:]).detach().permute(1,2,0).cpu().numpy()
+        pinv_y_0 = inverse_data_transform(config, pinv_y_0[0,:,:,:,:]).detach().permute(1,2,3,0).cpu().numpy()
 
         x = torch.randn(
             y_0.shape[0],
             config.data.channels,
+            config.data.image_size,
             config.data.image_size,
             config.data.image_size,
             device=self.device,
