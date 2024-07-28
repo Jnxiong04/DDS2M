@@ -32,13 +32,13 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
         seq (list): Sequence of timesteps for diffusion process
         model (VS2M): The model used for optimization
         b (torch.Tensor): Beta values for diffusion process
-        H_funcs: Functions for degradation and its pseudo-inverse
+        H_funcs: Functions for degradation
         y_0 (torch.Tensor): The degraded image
         sigma_0 (float): Noise standard deviation
-        etaB (float): Scaling factor for noise reduction
-        etaA (float): Scaling factor for noise addition
-        etaC (float): Scaling factor for combined noise
-        mask (torch.Tensor, optional): Mask for inpainting
+        etaB (float): Scaling factor for noise 
+        etaA (float): Scaling factor for noise 
+        etaC (float): Scaling factor for noise
+        mask (torch.Tensor, optional): Image mask
         img_clean (torch.Tensor, optional): Clean image
         logger (logging.Logger, optional): Logger to record the process
         args (Namespace, optional): Arguments for the process

@@ -150,7 +150,7 @@ class VS2M(object):
             image_noisy (np.ndarray): The noisy input image
             image_clean (np.ndarray): The clean target image
             at (torch.Tensor): Alpha values for diffusion process
-            mask (np.ndarray): Mask for inpainting
+            mask (np.ndarray): Mask
             iteration (int): Number of iterations for optimization
             logger (logging.Logger): Logger to record the process
             avg (np.ndarray): Averaged image from previous iterations
