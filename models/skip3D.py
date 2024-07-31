@@ -20,7 +20,7 @@ def skip(
     """
     assert len(num_channels_down) == len(num_channels_up) == len(num_channels_skip)
 
-    n_scales = len(num_channels_down) 
+    n_scales = len(num_channels_down)
 
     if not (isinstance(upsample_mode, list) or isinstance(upsample_mode, tuple)) :
         upsample_mode   = [upsample_mode]*n_scales

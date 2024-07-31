@@ -111,7 +111,7 @@ class Diffusion(object):
 
     def sample(self, logger, config, image_folder):
         """
-        Sample image using diffusion
+        Sample images using diffusion
 
         Args:
             logger (logging.Logger): Logger for logging information
@@ -122,18 +122,33 @@ class Diffusion(object):
         with open(path, 'rb') as f:
             x_test, y_test, observed_mask, missing_mask, ground_truth = pickle.load(f, encoding='latin1')
         
+        # mask_1 = np.tile(np.expand_dims(observed_mask, -1), (x_test.shape[0], 1, 1, 1, 1))
+        # mask_2 = np.tile(np.expand_dims(missing_mask, -1), (x_test.shape[0], 1, 1, 1, 1))
+
+        # dataset = TensorDataset(torch.tensor(x_test, dtype=torch.float32), 
+        #                         torch.tensor(y_test, dtype=torch.float32), 
+        #                         torch.tensor(mask_1, dtype=torch.float32), 
+        #                         torch.tensor(mask_2, dtype=torch.float32))
+
+        # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        results = []
         for image in x_test:
             model = VS2M(
                 self.args.rank, np.ones((self.config.data.image_size, self.config.data.image_size, self.config.data.image_size, self.config.data.channels)),
                 np.ones((self.config.data.image_size, self.config.data.image_size, self.config.data.image_size, self.config.data.channels)), 
                 self.args.beta, self.config.model.iter_number, self.config.model.lr
             )
-            self.sample_sequence(model, image, config, logger, image_folder=image_folder)
+            result = self.sample_sequence(model, image, config, logger, image_folder=image_folder)
+            results.append(result)
+        
+        with open(os.path.join(image_folder, f"x_demo.pickle"), 'wb') as f:
+            pickle.dump(results, f)
+            f.close()
 
 
     def sample_sequence(self, model, image, config=None, logger=None, image_folder=None):
         """
-        Generate a sequence of sampled images
+        Start sampling a single image
 
         Args:
             model (VS2M): The model used for sampling
@@ -180,7 +195,7 @@ class Diffusion(object):
             device=self.device,
         )
 
-        self.sample_image(pinv_y_0, x, model, H_funcs, y_0, sigma_0, mask=mask, img_clean=img_clean, logger=logger, image_folder=image_folder)
+        return self.sample_image(pinv_y_0, x, model, H_funcs, y_0, sigma_0, mask=mask, img_clean=img_clean, logger=logger, image_folder=image_folder)
 
 
     def sample_image(self, pinv_y_0, x, model, H_funcs, y_0, sigma_0, mask=None, img_clean=None, logger=None, image_folder=None):
@@ -203,7 +218,7 @@ class Diffusion(object):
         seq = range(0, self.num_timesteps, skip)
         
         # runs the diffusion model for denoising
-        efficient_generalized_steps(pinv_y_0, x, seq, model, self.betas, H_funcs, y_0, sigma_0, \
+        return efficient_generalized_steps(pinv_y_0, x, seq, model, self.betas, H_funcs, y_0, sigma_0, \
             etaB=self.args.etaB, etaA=self.args.eta, etaC=self.args.eta, mask=mask, img_clean = img_clean, logger=logger, args=self.args, config=self.config, image_folder=image_folder)
 
         

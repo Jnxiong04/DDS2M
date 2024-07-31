@@ -30,7 +30,7 @@ class VS2M(object):
         """
         self.beta = beta
         self.rank = rank
-        self.channel = image_noisy.shape[2]
+        self.channel = image_noisy.shape[3]
         self.image_size = image_noisy.shape[0]
         self.now_rank = self.rank
         self.image = np.reshape(image_noisy, (-1, image_noisy.shape[3]), order="F")
@@ -81,11 +81,11 @@ class VS2M(object):
         self.image_net = []
         self.parameters = []
         for i in range(self.rank):
-            net = skip(self.input_depth, self.output_depth,  num_channels_down = [16, 32, 64, 128, 128, 128],
-                           num_channels_up = [16, 32, 64, 128, 128, 128],
-                           num_channels_skip = [0, 0, 4, 4, 4, 4],
-                           filter_size_down = [7, 7, 5, 5, 3, 3], filter_size_up = [7, 7, 5, 5, 3, 3],
-                           upsample_mode='bilinear', downsample_mode='avg',
+            net = skip(self.input_depth, self.output_depth,  num_channels_down = [4, 8, 16, 16],
+                           num_channels_up = [4, 8, 16, 16],
+                           num_channels_skip = [0, 0, 4, 4],
+                           filter_size_down = [5, 5, 3, 3], filter_size_up = [5, 5, 3, 3],
+                           upsample_mode='trilinear', downsample_mode='avg',
                            need_sigmoid=False, pad=pad, act_fun='LeakyReLU').type(data_type)
             self.parameters = [p for p in net.parameters()] + self.parameters
             self.image_net.append(net)
@@ -110,11 +110,9 @@ class VS2M(object):
         """
         Initialize inputs to neural net
         """
-        original_noise = torch_to_np(get_noise1(1, 'noise', (self.input_depth, *self.image_clean.shape[:3]), noise_type='u',
+        original_noise = torch_to_np(get_noise1(1, 'noise', (self.input_depth, 32, 32, 32), noise_type='u',
                                                                      var=10/10.).type(torch.cuda.FloatTensor).detach())
         self.image_net_inputs = np_to_torch(original_noise).type(torch.cuda.FloatTensor).detach()[0, :, :, :, :]
-
-
         original_noise = torch_to_np(get_noise2(1, 'noise', self.image.shape[1], noise_type='u', var=10/ 10.).type(torch.cuda.FloatTensor).detach())
         self.mask_net_inputs = np_to_torch(original_noise).type(torch.cuda.FloatTensor).detach()[0, :, :, :]
         self.mask_net_inputs = self.mask_net_inputs
@@ -229,7 +227,7 @@ class VS2M(object):
         # compute losses
         self.loss1 = self.mse_loss(self.image_com_rescale * at.sqrt(), self.image_torch)
         self.loss2 = self.kl_loss(self.et)
-        self.image_com_rescale = torch.reshape(self.image_com_rescale, (self.image_size,self.image_size,self.channel)).permute(3,0,1,2).unsqueeze(0)
+        self.image_com_rescale = torch.reshape(self.image_com_rescale, (self.image_size,self.image_size, self.image_size, self.channel)).permute(3,0,1,2).unsqueeze(0)
         self.loss3 = self.tv_loss(self.image_com_rescale)
         self.total_loss = self.loss1 + self.beta * self.loss3
         self.total_loss.backward(retain_graph=True)
