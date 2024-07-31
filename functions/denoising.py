@@ -74,7 +74,7 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
     seq_next = [-1] + list(seq[:-1])
 
     iii= 0
-    psnr_best = 0
+    psnr_best = -np.inf  
     best = None
     ## iterate over the timesteps
     for i, j in tqdm(zip(reversed(seq), reversed(seq_next))):
