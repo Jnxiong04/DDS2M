@@ -110,7 +110,7 @@ class VS2M(object):
         """
         Initialize inputs to neural net
         """
-        original_noise = torch_to_np(get_noise1(1, 'noise', (self.input_depth, 32, 32, 32), noise_type='u',
+        original_noise = torch_to_np(get_noise1(1, 'noise', (self.input_depth, *self.image_clean.shape[:3]), noise_type='u',
                                                                      var=10/10.).type(torch.cuda.FloatTensor).detach())
         self.image_net_inputs = np_to_torch(original_noise).type(torch.cuda.FloatTensor).detach()[0, :, :, :, :]
         original_noise = torch_to_np(get_noise2(1, 'noise', self.image.shape[1], noise_type='u', var=10/ 10.).type(torch.cuda.FloatTensor).detach())

@@ -7,8 +7,8 @@ def main():
     with open(path, 'rb') as f:
         results = pickle.load(f)
     psnrs = []
-    for res in result:
-        psnrs.append(res[psnr])
+    for res in results:
+        psnrs.append(res['psnr_best'])
     
     print(psnrs)
     return 0
