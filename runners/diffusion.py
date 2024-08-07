@@ -122,6 +122,8 @@ class Diffusion(object):
         with open(path, 'rb') as f:
             x_test, y_test, observed_mask, missing_mask, ground_truth = pickle.load(f, encoding='latin1')
         
+        # x_test = (x_test-np.min(x_test))/(np.max(x_test)-np.min(x_test))
+        # y_test = (y_test-np.min(y_test))/(np.max(y_test)-np.min(y_test))
         # mask_1 = np.tile(np.expand_dims(observed_mask, -1), (x_test.shape[0], 1, 1, 1, 1))
         # mask_2 = np.tile(np.expand_dims(missing_mask, -1), (x_test.shape[0], 1, 1, 1, 1))
 
@@ -130,7 +132,7 @@ class Diffusion(object):
         #                         torch.tensor(mask_1, dtype=torch.float32), 
         #                         torch.tensor(mask_2, dtype=torch.float32))
 
-        # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        # dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
         results = []
         for image in x_test:
             model = VS2M(
@@ -141,9 +143,9 @@ class Diffusion(object):
             result = self.sample_sequence(model, image, config, logger, image_folder=image_folder)
             results.append(result)
         
-        with open(os.path.join(image_folder, f"x_demo.pickle"), 'wb') as f:
-            pickle.dump(results, f)
-            f.close()
+            with open(os.path.join(image_folder, f"x_demo_new.pickle"), 'wb') as f:
+                pickle.dump(results, f)
+                f.close()
 
 
     def sample_sequence(self, model, image, config=None, logger=None, image_folder=None):
@@ -164,7 +166,6 @@ class Diffusion(object):
         # get degradation matrix
         args.sigma_0 = float(deg[9:])
         H_funcs = Denoising(config.data.channels, config.data.image_size, self.device)
-        image = (image-np.min(image))/(np.max(image)-np.min(image)) # normalize image
         img_clean = torch.from_numpy(np.float32(image)).permute(3, 0, 1, 2).unsqueeze(0)
         ## to account for scaling to [-1,1]
         args.sigma_0 = 2 * args.sigma_0 
