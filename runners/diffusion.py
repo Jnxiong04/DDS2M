@@ -164,8 +164,8 @@ class Diffusion(object):
         # get degradation matrix
         args.sigma_0 = float(deg[9:])
         H_funcs = Denoising(config.data.channels, config.data.image_size, self.device)
+        image = (image-np.min(image))/(np.max(image)-np.min(image)) # normalize image
         img_clean = torch.from_numpy(np.float32(image)).permute(3, 0, 1, 2).unsqueeze(0)
-        
         ## to account for scaling to [-1,1]
         args.sigma_0 = 2 * args.sigma_0 
         sigma_0 = args.sigma_0
@@ -173,7 +173,7 @@ class Diffusion(object):
         x_orig = img_clean
         x_orig = x_orig.to(self.device)
 
-        x_orig = data_transform(self.config, x_orig)          # x = 2x + 1
+        x_orig = data_transform(self.config, x_orig)          # x = 2x - 1
 
         y_0 = H_funcs.H(x_orig) # (1, 629930) only include the konwn pixel for completion
         y_0 = y_0 + sigma_0 * torch.randn_like(y_0)  #add noise on the konwn pixel for completion

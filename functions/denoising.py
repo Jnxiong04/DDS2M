@@ -92,7 +92,6 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
             else:
                 xt = xt_next.to(x.device)
                 avg = x0_t[0, :, :, :, :].permute(1,2,3,0).cpu().numpy()
-
         ## The untrained network parameters are not updated until iii>args.start_point, roughly equivalent to starting the backdiffusion process from the args.start_point step
         update = False if iii < args.start_point else True
         # predict denoised image
@@ -147,7 +146,6 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
             
             x0_t = torch.clamp((x0_t + 1.0) / 2.0, 0.0, 1.0)
             psnr = quality(x0_t.squeeze(0).cpu().permute(1,2,3,0).numpy(), img_clean.squeeze(0).permute(1,2,3,0).numpy())
-
             if psnr_best < psnr:
                 psnr_best = psnr
                 best = x0_t.squeeze(0).cpu().permute(1,2,3,0).numpy()

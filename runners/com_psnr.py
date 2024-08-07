@@ -10,6 +10,7 @@ import math
 def quality (imagery1, imagery2):
     imagery1 = imagery1 * 255
     imagery2 = imagery2 * 255
+    
     Nway = imagery1.shape
     psnr = np.zeros((Nway[3], 1))
     # ssim = psnr
