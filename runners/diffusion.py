@@ -166,6 +166,7 @@ class Diffusion(object):
         # get degradation matrix
         args.sigma_0 = float(deg[9:])
         H_funcs = Denoising(config.data.channels, config.data.image_size, self.device)
+        image = (image-np.min(image))/(np.max(image)-np.min(image))
         img_clean = torch.from_numpy(np.float32(image)).permute(3, 0, 1, 2).unsqueeze(0)
         ## to account for scaling to [-1,1]
         args.sigma_0 = 2 * args.sigma_0 
