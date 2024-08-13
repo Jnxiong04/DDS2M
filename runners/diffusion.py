@@ -121,11 +121,11 @@ class Diffusion(object):
         path = os.path.join(config.data.root, config.data.filename)
         with open(path, 'rb') as f:
             x_test, y_test, observed_mask, missing_mask, ground_truth = pickle.load(f, encoding='latin1')
-        
+
         # x_test = (x_test-np.min(x_test))/(np.max(x_test)-np.min(x_test))
         # y_test = (y_test-np.min(y_test))/(np.max(y_test)-np.min(y_test))
-        # mask_1 = np.tile(np.expand_dims(observed_mask, -1), (x_test.shape[0], 1, 1, 1, 1))
-        # mask_2 = np.tile(np.expand_dims(missing_mask, -1), (x_test.shape[0], 1, 1, 1, 1))
+        mask_1 = np.tile(np.expand_dims(observed_mask, -1), (x_test.shape[0], 1, 1, 1, 1))
+        mask_2 = np.tile(np.expand_dims(missing_mask, -1), (x_test.shape[0], 1, 1, 1, 1))
 
         # dataset = TensorDataset(torch.tensor(x_test, dtype=torch.float32), 
         #                         torch.tensor(y_test, dtype=torch.float32), 
@@ -133,20 +133,30 @@ class Diffusion(object):
         #                         torch.tensor(mask_2, dtype=torch.float32))
 
         # dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
-        results = []
-        for image in x_test:
+        
+        x_test_recon = np.empty(x_test.shape)
+        all_results = []
+        for i, image in enumerate(x_test):
+            img_range = np.max(image) - np.min(image)
+            img_min = np.min(image)
+            image = (image - img_min)/img_range
             model = VS2M(
                 self.args.rank, np.ones((self.config.data.image_size, self.config.data.image_size, self.config.data.image_size, self.config.data.channels)),
                 np.ones((self.config.data.image_size, self.config.data.image_size, self.config.data.image_size, self.config.data.channels)), 
                 self.args.beta, self.config.model.iter_number, self.config.model.lr
             )
             result = self.sample_sequence(model, image, config, logger, image_folder=image_folder)
-            results.append(result)
+            x_test_recon[i] = (result['x_recon'] * img_range) + img_min
+            all_results.append(result)
         
-            with open(os.path.join(image_folder, f"x_demo_new.pickle"), 'wb') as f:
-                pickle.dump(results, f)
+            with open(os.path.join(image_folder, f"demo_dataset_recon.pickle"), 'wb') as f:
+                new_data = (x_test_recon, y_test, observed_mask, missing_mask, ground_truth)
+                pickle.dump(new_data, f)
                 f.close()
 
+            with open(os.path.join(image_folder, f"all_stats.pickle"), 'wb') as f:
+                pickle.dump(all_results, f)
+                f.close()
 
     def sample_sequence(self, model, image, config=None, logger=None, image_folder=None):
         """
@@ -166,7 +176,6 @@ class Diffusion(object):
         # get degradation matrix
         args.sigma_0 = float(deg[9:])
         H_funcs = Denoising(config.data.channels, config.data.image_size, self.device)
-        image = (image-np.min(image))/(np.max(image)-np.min(image))
         img_clean = torch.from_numpy(np.float32(image)).permute(3, 0, 1, 2).unsqueeze(0)
         ## to account for scaling to [-1,1]
         args.sigma_0 = 2 * args.sigma_0 
