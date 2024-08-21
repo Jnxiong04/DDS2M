@@ -3,13 +3,15 @@ import sys
 import os
 
 def main():
-    path = os.path.join('./results/test', 'x_demo_new.pickle')
+    denoise_type = 'orig'
+    path = os.path.join('/results/{}'.format(denoise_type), 'demo_recon_{}.pickle'.format(denoise_type))
+    print("getting results for " + denoise_type)
     with open(path, 'rb') as f:
         results = pickle.load(f)
     psnrs = []
     for res in results:
         psnrs.append(res['psnr_best'])
-    
+    print(len(psnrs))
     print(psnrs)
     return 0
 
