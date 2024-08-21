@@ -103,7 +103,7 @@ def main():
     args, config = parse_args_and_config()
 
     # create output file
-    args.logger_name = "orig"
+    args.logger_name = "degrade"
     args.image_folder = os.path.join('./results', args.logger_name)
     if not os.path.exists(args.image_folder):
         os.makedirs(args.image_folder)
