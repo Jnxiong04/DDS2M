@@ -3,8 +3,8 @@ import sys
 import os
 
 def main():
-    denoise_type = 'orig'
-    path = os.path.join('/results/{}'.format(denoise_type), 'demo_recon_{}.pickle'.format(denoise_type))
+    denoise_type = 'degrade'
+    path = os.path.join('results/{}'.format(denoise_type), 'all_stats')
     print("getting results for " + denoise_type)
     with open(path, 'rb') as f:
         results = pickle.load(f)

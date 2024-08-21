@@ -108,6 +108,13 @@ class Diffusion(object):
             self.logvar = betas.log()
         elif self.model_var_type == "fixedsmall":
             self.logvar = posterior_variance.clamp(min=1e-20).log()
+    
+    def forward_diffusion(self, x, t):
+        e = torch.randn_like(x)
+        a_t = self.alphas_cumprod_prev[t]
+        return (torch.sqrt(a_t)*x) + (torch.sqrt(a_t)*e).to(self.device)
+      
+
 
     def sample(self, logger, config, image_folder):
         """
@@ -148,7 +155,7 @@ class Diffusion(object):
             result = self.sample_sequence(model, image, config, logger, image_folder=image_folder)
             x_test_recon[i] = (result['x_recon'] * img_range) + img_min
             all_results.append(result)
-            with open(os.path.join(image_folder, f"demo_recon_orig.pickle"), 'wb') as f:
+            with open(os.path.join(image_folder, f"demo_recon_degrade.pickle"), 'wb') as f:
                 new_data = (x_test_recon, y_test, observed_mask, missing_mask, ground_truth)
                 pickle.dump(new_data, f)
                 f.close()
@@ -197,6 +204,8 @@ class Diffusion(object):
         pinv_y_0 = inverse_data_transform(config, pinv_y_0[0,:,:,:,:]).detach().permute(1,2,3,0).cpu().numpy()
         
         x = img_clean.to(self.device)
+
+        x = self.forward_diffusion(x, 1000)
 
         return self.sample_image(pinv_y_0, x, model, H_funcs, y_0, sigma_0, mask=mask, img_clean=img_clean, logger=logger, image_folder=image_folder)
 
