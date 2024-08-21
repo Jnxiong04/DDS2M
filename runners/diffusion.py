@@ -148,8 +148,7 @@ class Diffusion(object):
             result = self.sample_sequence(model, image, config, logger, image_folder=image_folder)
             x_test_recon[i] = (result['x_recon'] * img_range) + img_min
             all_results.append(result)
-        
-            with open(os.path.join(image_folder, f"demo_dataset_recon.pickle"), 'wb') as f:
+            with open(os.path.join(image_folder, f"demo_recon_orig.pickle"), 'wb') as f:
                 new_data = (x_test_recon, y_test, observed_mask, missing_mask, ground_truth)
                 pickle.dump(new_data, f)
                 f.close()
@@ -196,15 +195,8 @@ class Diffusion(object):
             pinv_y_0 += H_funcs.H_pinv(H_funcs.H(torch.ones_like(pinv_y_0))).reshape(*pinv_y_0.shape) - 1
 
         pinv_y_0 = inverse_data_transform(config, pinv_y_0[0,:,:,:,:]).detach().permute(1,2,3,0).cpu().numpy()
-
-        x = torch.randn(
-            y_0.shape[0],
-            config.data.channels,
-            config.data.image_size,
-            config.data.image_size,
-            config.data.image_size,
-            device=self.device,
-        )
+        
+        x = img_clean.to(self.device)
 
         return self.sample_image(pinv_y_0, x, model, H_funcs, y_0, sigma_0, mask=mask, img_clean=img_clean, logger=logger, image_folder=image_folder)
 

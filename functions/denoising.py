@@ -158,9 +158,9 @@ def efficient_generalized_steps(pinv_y_0, x, seq, model, b, H_funcs, y_0, sigma_
     img_clean_save = img_clean[0,:,:,:,:].permute(1,2,3,0).cpu().numpy()
     psnr = quality(x_save, img_clean[0,:,:,:,:].permute(1,2,3,0).detach().cpu().numpy())
 
-    scio.savemat(
-        os.path.join(image_folder, f"x_{iii}.mat"), {'y_0': pinv_y_0, 'x_recon':x_save, 'img_clean':img_clean_save, 'psnr':psnr, 'x_best':np.clip(x_best,0,1), 'psnr_best':psnr_best}
-    )
+    # scio.savemat(
+    #     os.path.join(image_folder, f"x_{iii}.mat"), {'y_0': pinv_y_0, 'x_recon':x_save, 'img_clean':img_clean_save, 'psnr':psnr, 'x_best':np.clip(x_best,0,1), 'psnr_best':psnr_best}
+    # )
     
     return {'y_0': pinv_y_0, 'x_recon':x_save, 'img_clean':img_clean_save, 'psnr':psnr, 'x_best':np.clip(x_best,0,1), 'psnr_best':psnr_best}
 
